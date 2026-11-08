@@ -1,0 +1,7 @@
+services:
+  osi-frames:
+    build: .
+    container_name: osi-frames
+    ports:
+      - "3020:3000"
+    restart: unless-stopped

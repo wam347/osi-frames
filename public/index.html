@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSI-Frames</title>
+<style>
+body{font-family:Calibri,Arial,sans-serif;max-width:760px;margin:0 auto;padding:12px;background:#0f172a;color:#e2e8f0}
+h1{margin:.2em 0;font-size:1.4em}h2{margin:.2em 0}
+.card{background:#1e293b;border-radius:12px;padding:12px;margin:10px 0}
+button,select,input{font:inherit;padding:9px;border-radius:8px;border:0;margin:3px 0}
+button{background:#2563eb;color:#fff;cursor:pointer}button:hover{background:#1d4ed8}
+button.alt{background:#475569}button.on{background:#16a34a}
+select,input{background:#0f172a;color:#e2e8f0;border:1px solid #475569;max-width:100%}
+.hint{opacity:.7;font-size:.92em}.me{color:#facc15}
+.topo{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{background:#334155;border-radius:8px;padding:5px 8px;font-size:.88em;text-align:center}
+.chip.mine{outline:2px solid #facc15}.chip.work{background:#b45309;animation:p 1s infinite}
+@keyframes p{50%{opacity:.55}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.layer{border-radius:8px;padding:6px 10px;margin:4px 0;background:#0f172a}
+.layer.locked{opacity:.5}.layer.open{border-left:4px solid #22c55e}
+.row{display:flex;justify-content:space-between;gap:10px;font-family:Consolas,monospace;font-size:.9em}
+.form{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;margin:8px 0}
+.hops button{display:block;width:100%;text-align:left;margin:4px 0}
+.log div{margin:3px 0;font-size:.92em}
+details summary{cursor:pointer;font-weight:bold}
+</style></head><body>
+<h1>🧱 OSI-Frames – Jeder ein Gerät</h1>
+<div id="top"></div><div id="topo"></div><div id="main"></div><div class="card log" id="log"></div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const s=io(),$=id=>document.getElementById(id);let S=null,fv={},lastSig='',lastId='';
+const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const LV={1:'Level 1 – Weiterleiten: Schichten öffnen und Ziel wählen, Felder füllt das Programm',2:'Level 2 – Felder selbst ausfüllen (MAC, IP, Port, TTL)',3:'Level 3 – komplett mit ARP und TCP-Handshake'};
+s.on('err',m=>alert(m));s.on('state',x=>{S=x;render()});
+document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.k)fv[e.target.dataset.k]=e.target.value});
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.id==='join')s.emit('join',{room:$('room').value,name:$('nm').value});
+ else if(b.dataset.claim)s.emit('claim',b.dataset.claim);
+ else if(b.dataset.lv)s.emit('level',b.dataset.lv);
+ else if(b.id==='rel')s.emit('release');else if(b.id==='start')s.emit('start');else if(b.id==='again')s.emit('again');
+ else if(b.id==='open')s.emit('open');
+ else if(b.dataset.hop){const f={};document.querySelectorAll('[data-k]').forEach(c=>{f[c.dataset.k]=c.value});s.emit('send',{next:b.dataset.hop,fields:f});}});
+function login(){$('main').innerHTML='<div class="card"><input id="nm" placeholder="Dein Name" style="width:100%;box-sizing:border-box"><input id="room" placeholder="Raumcode (z. B. FISI1)" style="width:100%;box-sizing:border-box"><button id="join" style="width:100%">Beitreten</button></div>'}
+function render(){
+ $('top').innerHTML='<div class="card">Raum <b>'+esc(S.code)+'</b> · Du: <span class="me">'+esc(S.me)+'</span>'+(S.phase!=='lobby'?' · Fortschritt <b>'+S.progress.done+'/'+S.progress.total+'</b> · Fehler <b>'+S.errCount+'</b>':'')+'</div>';
+ $('topo').innerHTML=S.phase==='lobby'?'':topo();
+ if(S.phase==='lobby')lobby();else if(S.phase==='done')done();else play();
+ $('log').innerHTML='<b>Netzwerk-Ereignisse</b>'+S.log.map(l=>'<div>'+esc(l)+'</div>').join('');
+}
+function chip(d){return '<div class="chip'+(S.dev&&S.dev.id===d.id?' mine':'')+(d.work?' work':'')+'"><b>'+esc(d.n)+'</b><br>'+(d.who?esc(d.who):'🤖 Computer')+'</div>'}
+function topo(){const R=S.roster,g=id=>R.find(d=>d.id===id);
+ return '<div class="card topo"><div class="topo">'+R.filter(d=>d.t==='client').map(chip).join('')+'</div>→'+chip(g('SW1'))+'→'+chip(g('R1'))+'→'+chip(g('R2'))+'→'+chip(g('SW2'))+'→<div>'+chip(g('DNS'))+chip(g('WEB'))+'</div></div>'}
+function lobby(){
+ let h='<div class="card"><b>Wähle dein Gerät</b> <span class="hint">(freie Rollen spielt später der Computer)</span><div class="grid">';
+ S.roster.forEach(d=>{const mine=d.who===S.me;h+='<div class="chip"><b>'+esc(d.n)+'</b><br>'+(d.who?esc(d.who):'frei')+'<br>'+(mine?'<button id="rel" class="alt">Verlassen</button>':(d.who?'':'<button data-claim="'+d.id+'">Übernehmen</button>'))+'</div>'});
+ h+='</div><button data-claim="NEW" class="alt">➕ Weiterer Client</button></div>';
+ h+='<div class="card"><b>Level</b>';
+ for(const n of [1,2,3])h+=(S.isHost?'<button data-lv="'+n+'" class="'+(S.level===n?'on':'alt')+'" style="display:block;width:100%;text-align:left">':'<div style="margin:6px 0;'+(S.level===n?'color:#4ade80;font-weight:bold':'opacity:.6')+'">')+LV[n]+(S.isHost?'</button>':'</div>');
+ h+=S.isHost?'<button id="start" style="width:100%">Spiel starten</button>':'<p class="hint">Warte, bis '+esc(S.host)+' startet …</p>';
+ $('main').innerHTML=h+'</div>';lastSig='';
+}
+function ctl(k){const v=fv[k]||'',L=S.lists;
+ if(k==='l3.ttl')return '<input type="number" data-k="'+k+'" value="'+esc(v)+'" placeholder="Zahl">';
+ const arr=k==='l7'?L.l7:(k.startsWith('l2')||k==='l3.mac')?L.macs:k.startsWith('l3')?L.ips:L.ports;
+ return '<select data-k="'+k+'"><option value="">– wählen –</option>'+arr.map(o=>'<option'+(String(o)===v?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select>'}
+const KL={'l2.src':'Neue Quell-MAC','l2.dst':'Ziel-MAC','l3.mac':'MAC-Antwort','l3.dst':'Ziel-IP','l4.dst':'Ziel-Port','l3.ttl':'Neue TTL','l7':'Antwort-Daten'};
+function play(){const d=S.dev;
+ if(!d){$('main').innerHTML='<div class="card">Du hast kein Gerät und schaust zu.</div>';return}
+ const id=[d.mode,d.frame&&d.frame.tx,d.frame&&d.frame.leg].join('|');if(id!==lastId){fv={};lastId=id}
+ const sig=JSON.stringify([d.mode,d.frame,d.queue,d.info,d.opts]);if(sig===lastSig)return;lastSig=sig;
+ let h='<div class="card"><h2>'+esc(d.n)+'</h2><div class="hint">Dieses Gerät arbeitet bis Schicht '+d.lim+'.</div><details><summary>Meine Tabellen</summary>'+d.info.map(l=>'<div>'+esc(l)+'</div>').join('')+'</details></div>';
+ if(!d.mode)h+='<div class="card hint">Warte auf Frames … (Warteschlange: '+d.queue+')</div>';
+ else{
+  h+='<div class="card"><b>'+(d.mode==='create'?'Neue Aufgabe: ':'Frame empfangen: ')+esc(d.task)+'</b>';
+  d.frame.layers.forEach(l=>{h+=l.open?'<div class="layer open"><b>Schicht '+l.n+' – '+l.name+'</b>'+l.rows.map(r=>'<div class="row"><span>'+esc(r[1])+'</span><span>'+esc(r[2])+'</span></div>').join('')+'</div>':'<div class="layer locked">🔒 Schicht '+l.n+' – '+l.name+'</div>'});
+  if(d.mode==='recv'&&d.frame.opened<7)h+='<button id="open">🔓 Nächste Schicht öffnen (Schicht '+(d.frame.opened+1)+')</button>';
+  if(d.keys.length)h+='<div class="form">'+d.keys.map(k=>'<label>'+KL[k]+'</label>'+ctl(k)).join('')+'</div>';
+  h+='<p><b>Was machst du mit dem Frame?</b></p><div class="hops">'+d.opts.map(o=>'<button data-hop="'+o.id+'" class="'+(o.id==='DROP'?'alt':'')+'">'+esc(o.label)+'</button>').join('')+'</div></div>';
+ }
+ $('main').innerHTML=h;
+}
+function done(){let h='<div class="card"><h2>🎉 Geschafft!</h2>Fortschritt '+S.progress.done+'/'+S.progress.total+', Fehler im Netz: <b>'+S.errCount+'</b>';
+ if(S.errors&&S.errors.length)h+='<p><b>Auswertung der Fehler:</b></p>'+S.errors.map(e=>'<div>• '+esc(e.dev)+' ('+esc(e.tx)+'): '+esc(e.why)+'</div>').join('');
+ h+=S.isHost?'<button id="again" style="width:100%">Zurück zur Lobby</button>':'<p class="hint">Warte auf '+esc(S.host)+' …</p>';$('main').innerHTML=h+'</div>';lastSig=''}
+login();
+</script></body></html>

@@ -1,0 +1,11 @@
+services:
+  osi-frames:
+    image: node:20-alpine
+    container_name: osi-frames
+    working_dir: /app
+    volumes:
+      - /volume1/docker/osi-frames:/app
+    command: sh -c "npm install --omit=dev && node server.js"
+    ports:
+      - "3020:3000"
+    restart: unless-stopped
